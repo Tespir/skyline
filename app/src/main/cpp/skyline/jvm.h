@@ -21,6 +21,7 @@ namespace skyline {
     /**
      * @brief A wrapper over `Settings` kotlin class
      * @note The lifetime of the jni environment must exceed the lifetime of the instances of this class
+     * @note Copy construction of this class is disallowed so that instances may only be created from valid JNIEnv and jobject 
      */
     class KtSettings {
       private:
@@ -30,6 +31,10 @@ namespace skyline {
 
       public:
         KtSettings(JNIEnv *env, jobject settingsInstance) : env(env), settingsInstance(settingsInstance), settingsClass(env->GetObjectClass(settingsInstance)) {}
+
+        KtSettings(const KtSettings &) = delete;
+        void operator=(const KtSettings &) = delete;
+        KtSettings(KtSettings &&) = default;
 
         template<typename T>
         requires std::is_integral_v<T> || std::is_enum_v<T>
