@@ -106,8 +106,14 @@ namespace skyline::gpu {
     }
 
     vk::DeviceSize MegaBuffer::Push(span<u8> data, bool pageAlign) {
-        if (data.size() > freeRegion.size())
-            throw exception("Ran out of megabuffer space! Alloc size: 0x{:X}", data.size());
+        auto[resultSpan, offset]{Allocate(data.size(), pageAlign)};
+        resultSpan.copy_from(data);
+        return offset;
+    }
+
+    std::tuple<span<u8>, vk::DeviceSize> MegaBuffer::Allocate(vk::DeviceSize size, bool pageAlign) {
+        if (size > freeRegion.size())
+            throw exception("Ran out of megabuffer space! Alloc size: 0x{:X}", size);
 
         if (pageAlign) {
             // If page aligned data was requested then align the free
@@ -116,12 +122,11 @@ namespace skyline::gpu {
         }
 
         // Allocate space for data from the free region
-        auto resultSpan{freeRegion.subspan(0, data.size())};
-        resultSpan.copy_from(data);
+        auto resultSpan{freeRegion.subspan(0, size)};
 
         // Move the free region along
-        freeRegion = freeRegion.subspan(data.size());
-        return static_cast<vk::DeviceSize>(resultSpan.data() - slot.backing.data());
+        freeRegion = freeRegion.subspan(size);
+        return {resultSpan, static_cast<vk::DeviceSize>(resultSpan.data() - slot.backing.data())};
     }
 
     MegaBuffer BufferManager::AcquireMegaBuffer(const std::shared_ptr<FenceCycle> &cycle) {
@@ -138,7 +143,7 @@ namespace skyline::gpu {
             }
         }
 
-        auto& megaBuffer{megaBuffers.emplace_back(gpu)};
+        auto &megaBuffer{megaBuffers.emplace_back(gpu)};
         megaBuffer.cycle = cycle;
         return {megaBuffer};
     }

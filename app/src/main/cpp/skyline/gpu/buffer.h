@@ -127,7 +127,7 @@ namespace skyline::gpu {
         }
 
         /**
-         * @return A span over the backing of this buffer
+         * @return A span of the backing of this buffer
          * @note This operation **must** be performed only on host-only buffers since synchronization is handled internally for guest-backed buffers
          */
         span<u8> GetBackingSpan() {

@@ -83,5 +83,12 @@ namespace skyline::gpu {
          * @param pageAlign Whether the pushed data should be page aligned in the megabuffer
          */
         vk::DeviceSize Push(span<u8> data, bool pageAlign = false);
+
+        /**
+         * @brief Allocates the requested amount of space in the megabuffer
+         * @param pageAlign Whether the allocation should be page aligned in the megabuffer
+         * @return A span of the allocated region and the offset at which it was allocated
+         */
+        std::tuple<span<u8>, vk::DeviceSize> Allocate(vk::DeviceSize size, bool pageAlign = false);
     };
 }
