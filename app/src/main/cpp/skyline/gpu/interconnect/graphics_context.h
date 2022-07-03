@@ -1696,6 +1696,17 @@ namespace skyline::gpu::interconnect {
             return {quadListConversionBuffer->GetView(0, size), vk::IndexType::eUint32, conversion::quads::GetIndexCount(count)};
         }
 
+        std::tuple<span<u8>, vk::DeviceSize, u32> GetIndexedQuadConversionBuffer(u32 count) {
+            vk::DeviceSize size{conversion::quads::GetRequiredBufferSize(count, indexBuffer.type)};
+            auto[convertedIndexBuffer, offset]{executor.megaBuffer.Allocate(size)};
+            auto guestIndexBuffer{indexBuffer.view.GetReadOnlyBackingSpan(executor.cycle, []() {
+                // TODO: see Read()
+                Logger::Error("Dirty index buffer reads for attached buffers are unimplemented");
+            })};
+            conversion::quads::GenerateIndexedQuadConversionBuffer(convertedIndexBuffer.data(), guestIndexBuffer.data(), count, indexBuffer.type);
+            return {convertedIndexBuffer, offset, conversion::quads::GetIndexCount(count)};
+        }
+
       public:
         void SetVertexBufferStride(u32 index, u32 stride) {
             vertexBuffers[index].bindingDescription.stride = stride;
@@ -2822,24 +2833,30 @@ namespace skyline::gpu::interconnect {
 
             std::shared_ptr<BoundIndexBuffer> boundIndexBuffer{};
             if constexpr (IsIndexed) {
-                if (needsQuadConversion)
-                    throw exception("Indexed quad conversion is not supported");
-
                 auto indexBufferView{GetIndexBuffer(count)};
-
-                std::scoped_lock lock(indexBufferView);
-
                 boundIndexBuffer = std::make_shared<BoundIndexBuffer>();
                 boundIndexBuffer->type = indexBuffer.type;
-                if (auto megaBufferOffset{indexBufferView.AcquireMegaBuffer(executor.megaBuffer)}) {
-                    // If the buffer is megabuffered then since we don't get out data from the underlying buffer, rather the megabuffer which stays consistent throughout a single execution, we can skip registering usage
+
+                std::scoped_lock lock(indexBufferView);
+                if (needsQuadConversion) {
+                    // Convert the guest-supplied quad index buffer to a triangle list
+                    auto[convertedBuffer, offset, indexCount] = GetIndexedQuadConversionBuffer(count);
                     boundIndexBuffer->handle = executor.megaBuffer.GetBacking();
-                    boundIndexBuffer->offset = megaBufferOffset;
+                    boundIndexBuffer->offset = offset;
+                    count = indexCount;
                 } else {
-                    indexBufferView.RegisterUsage(executor.cycle, [=](const Buffer::BufferViewStorage &view, const std::shared_ptr<Buffer> &buffer) {
-                        boundIndexBuffer->handle = buffer->GetBacking();
-                        boundIndexBuffer->offset = view.offset;
-                    });
+                    if (auto megaBufferOffset{indexBufferView.AcquireMegaBuffer(executor.megaBuffer)}) {
+                        // If the buffer is megabuffered then since we don't get out data from the underlying buffer, rather the megabuffer which stays consistent throughout a single execution, we can skip registering usage
+                        boundIndexBuffer->handle = executor.megaBuffer.GetBacking();
+                        boundIndexBuffer->offset = megaBufferOffset;
+                    } else {
+                        indexBufferView.RegisterUsage(executor.cycle, [=](const Buffer::BufferViewStorage &view, const std::shared_ptr<Buffer> &buffer) {
+                            boundIndexBuffer->handle = buffer->GetBacking();
+                            boundIndexBuffer->offset = view.offset;
+                        });
+                    }
+
+                    executor.AttachBuffer(indexBufferView);
                 }
 
                 executor.AttachBuffer(indexBufferView);
