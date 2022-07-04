@@ -33,9 +33,6 @@ class SkylineApplication : Application() {
         super.onCreate()
         instance = this
         System.loadLibrary("skyline")
-
-        val appFilesPath = applicationContext.getPublicFilesDir().canonicalPath
-        File("$appFilesPath/logs/").mkdirs()
-        initializeLog("$appFilesPath/", getSettings().logLevel.toInt())
+        initializeLog(applicationContext.filesDir.canonicalPath + "/", getSettings().logLevel)
     }
 }

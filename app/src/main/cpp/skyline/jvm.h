@@ -19,6 +19,39 @@ namespace skyline {
     };
 
     /**
+     * @brief A wrapper over `Settings` kotlin class
+     * @note The lifetime of the jni environment must exceed the lifetime of the instances of this class
+     * @note Copy construction of this class is disallowed so that instances may only be created from valid JNIEnv and jobject 
+     */
+    class KtSettings {
+      private:
+        JNIEnv *env; //!< A pointer to the current jni environment
+        jclass settingsClass; //!< The settings class
+        jobject settingsInstance; //!< A reference to the settings instance
+
+      public:
+        KtSettings(JNIEnv *env, jobject settingsInstance) : env(env), settingsInstance(settingsInstance), settingsClass(env->GetObjectClass(settingsInstance)) {}
+
+        KtSettings(const KtSettings &) = delete;
+        void operator=(const KtSettings &) = delete;
+        KtSettings(KtSettings &&) = default;
+
+        template<typename T>
+        requires std::is_integral_v<T> || std::is_enum_v<T>
+        T GetInt(const char *key) {
+            return static_cast<T>(env->GetIntField(settingsInstance, env->GetFieldID(settingsClass, key, "I")));
+        }
+
+        bool GetBool(const char *key) {
+            return static_cast<bool>(env->GetBooleanField(settingsInstance, env->GetFieldID(settingsClass, key, "Z")));
+        }
+
+        JniString GetString(const char *key) {
+            return {env, static_cast<jstring>(env->GetObjectField(settingsInstance, env->GetFieldID(settingsClass, key, "Ljava/lang/String;")))};
+        }
+    };
+
+    /**
      * @brief The JvmManager class is used to simplify transactions with the Java component
      */
     class JvmManager {
